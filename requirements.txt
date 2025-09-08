@@ -1,7 +1,7 @@
 Flask==3.1.1
 Flask_RESTful==0.3.10
 geopy==2.4.1
-numpy==2.3.2
+numpy==1.26.4
 geopy==2.4.1
 opencv_python_headless==4.10.0.84
 pandas==2.3.2
