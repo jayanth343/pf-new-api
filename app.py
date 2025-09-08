@@ -84,9 +84,6 @@ If no issues are visible, return:
 }
 """
 
-
-
-
 load_dotenv()
 app = Flask(__name__)
 api = Api(app)
@@ -97,8 +94,6 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-
 
 def compute_walkability(pred_mask, image_path=None, detections=None):
     kernel = np.ones((3, 3), np.uint8)
@@ -201,8 +196,6 @@ def compute_walkability(pred_mask, image_path=None, detections=None):
     print(f"Walkability Score: wAP: {wap:.2f} cs: {cs:.2f} os: {os:.2f} = final: {walkability_score:.2f}")
     return round(walkability_score, 2)
 
-
-
 class FootPath(Resource):
     def post(self):
         try:
@@ -275,55 +268,55 @@ class FootPath(Resource):
                 topmost_pixel = None
                 focal_length_px = None
                 
-            try:
-                with open(image_path, "rb") as image_file, open(mask_path, "rb") as mask_file:
-                    files = {
-                        "file": image_file,
-                        "mask": mask_file
-                    }
-                    response = requests.post(
-                        os.getenv("DEPTH_LIT_URL"), 
-                        files=files,
-                        headers={'Authorization': 'Bearer 35be253d-6005-4bd5-80c8-0e5b4487af28'},
-                        timeout=30
-                    )
-                    
-                    print(f"Depth service response status: {response.status_code}")
-                    print(f"Depth service response headers: {response.headers}")
-                    print(f"Raw response text: {response.text}")
-                    
-                    if response.status_code == 200:
-                        try:
-                            depth_results = response.json()
-                            print(f"Parsed depth results: {depth_results}")
-                            
-                            # Check if the expected fields exist
-                            distance_meters = depth_results.get('distance_meters')
-                            topmost_pixel = depth_results.get('topmost_pixel')
-                            focal_length_px = depth_results.get('focal_length_px')
-                            
-                            print(f"distance_meters: {distance_meters}")
-                            print(f"topmost_pixel: {topmost_pixel}")
-                            print(f"focal_length_px: {focal_length_px}")
-                            
-                            # Check for None values specifically
-                            if distance_meters is None:
-                                print("WARNING: distance_meters is None")
-                            if topmost_pixel is None:
-                                print("WARNING: topmost_pixel is None")
+                try:
+                    with open(image_path, "rb") as image_file, open(mask_path, "rb") as mask_file:
+                        files = {
+                            "file": image_file,
+                            "mask": mask_file
+                        }
+                        response = requests.post(
+                            os.getenv("DEPTH_LIT_URL"), 
+                            files=files,
+                            headers={'Authorization': 'Bearer 35be253d-6005-4bd5-80c8-0e5b4487af28'},
+                            timeout=30
+                        )
+                        
+                        print(f"Depth service response status: {response.status_code}")
+                        print(f"Depth service response headers: {response.headers}")
+                        print(f"Raw response text: {response.text}")
+                        
+                        if response.status_code == 200:
+                            try:
+                                depth_results = response.json()
+                                print(f"Parsed depth results: {depth_results}")
                                 
-                        except json.JSONDecodeError as e:
-                            print(f"Failed to parse depth service JSON: {e}")
-                            print(f"Raw response content: {response.text}")
+                                # Check if the expected fields exist
+                                distance_meters = depth_results.get('distance_meters')
+                                topmost_pixel = depth_results.get('topmost_pixel')
+                                focal_length_px = depth_results.get('focal_length_px')
+                                
+                                print(f"distance_meters: {distance_meters}")
+                                print(f"topmost_pixel: {topmost_pixel}")
+                                print(f"focal_length_px: {focal_length_px}")
+                                
+                                # Check for None values specifically
+                                if distance_meters is None:
+                                    print("WARNING: distance_meters is None")
+                                if topmost_pixel is None:
+                                    print("WARNING: topmost_pixel is None")
+                                    
+                            except json.JSONDecodeError as e:
+                                print(f"Failed to parse depth service JSON: {e}")
+                                print(f"Raw response content: {response.text}")
+                                depth_results = None
+                        else:
+                            print(f"Depth service error: {response.status_code}")
+                            print(f"Error response: {response.text}")
                             depth_results = None
-                    else:
-                        print(f"Depth service error: {response.status_code}")
-                        print(f"Error response: {response.text}")
-                        depth_results = None
-            except Exception as e:
+                except Exception as e:
                     print(f"Unexpected error with depth service: {e}")
                     depth_results = None
-            finally:
+                finally:
                     # Clean up mask file
                     if os.path.exists(mask_path):
                         os.remove(mask_path)
@@ -336,7 +329,6 @@ class FootPath(Resource):
                     focal_length_px = depth_results.get('focal_length_px')
                     print(f"Checking depth data - distance_meters: {distance_meters}, topmost_pixel: {topmost_pixel}")
 
-                
                 if distance_meters is not None and topmost_pixel is not None:
                     length = distance_meters
                     end = distance(meters=length).destination(point=Point(start_latitude, start_longitude), bearing=bearing)
@@ -357,7 +349,7 @@ class FootPath(Resource):
                     end_lat, end_lng = end.latitude, end.longitude
                 else:
                     # Use default distance if depth estimation fails
-                     return jsonify({'Error': 'Could not caclulate depth'})
+                    return jsonify({'Error': 'Could not calculate depth'})
             else:
                 footpathPercentage = 0
                 # Use default coordinates if no footpath detected
@@ -452,6 +444,51 @@ class FootPath(Resource):
             except PermissionError:
                 print(f"Could not remove {image_path} - file in use")
             return jsonify({'Error': str(e)})
+
+    def trigger_auth_tagging_async(self, image_path, start_latitude, start_longitude, fid):
+        """Trigger auth tagging via async HTTP request (worker-friendly)"""
+        try:
+            def make_request():
+                try:
+                    with open(image_path, 'rb') as img_file:
+                        files = {'image': img_file}
+                        data = {
+                            'startLatitude': start_latitude,
+                            'startLongitude': start_longitude,
+                            'fid': fid
+                        }
+                        
+                        # Make request to auth-tagging endpoint
+                        # Update URL for your deployment
+                        response = requests.post(
+                            'http://localhost:5000/auth-tagging',
+                            files=files, 
+                            data=data,
+                            timeout=60
+                        )
+                        
+                        if response.status_code == 200:
+                            print(f"Auth tagging completed for FID {fid}")
+                        else:
+                            print(f"Auth tagging failed for FID {fid}: {response.status_code}")
+                            
+                except Exception as e:
+                    print(f"Error in async auth tagging for FID {fid}: {e}")
+                finally:
+                    # Always clean up image file after processing
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
+                        print(f"Cleaned up image file: {image_path}")
+            
+            # Use daemon thread for background processing
+            thread = threading.Thread(target=make_request, daemon=True)
+            thread.start()
+            
+        except Exception as e:
+            print(f"Failed to trigger async auth tagging: {e}")
+            # Clean up immediately if thread creation fails
+            if os.path.exists(image_path):
+                os.remove(image_path)
 
 def clean_and_parse_json(response_text):
     """Clean and parse JSON response from the API"""
@@ -564,4 +601,3 @@ api.add_resource(AuthTagging, '/auth-tagging')
 
 if __name__ == '__main__':
     app.run(debug=True)
-
