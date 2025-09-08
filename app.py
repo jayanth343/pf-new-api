@@ -235,8 +235,6 @@ class FootPath(Resource):
             start_longitude = float(start_longitude)
             bearing = float(request.form.get('bearing', 0))
             
-
-            
             # Roboflow prediction for footpath detection
             rf = Roboflow(api_key=ROBOFLOW_API_KEY)
             project = rf.workspace().project("orr")
@@ -260,18 +258,22 @@ class FootPath(Resource):
                     cv2.fillPoly(mask, [points], 1)
                     masks.append(mask)
     
-            
             # Unify mask & Calculate footpath percentage
             if len(masks) > 0:
                 unified_mask = masks[0].copy()  # Initialize with the first mask
                 for mask in masks[1:]:  # Start from the second mask
                     unified_mask = np.logical_or(unified_mask, mask).astype(np.uint8)
                 walkability_score = compute_walkability(unified_mask, image_path, detections)  # Pass unified mask
-                footpathPercentage =  walkability_score
+                footpathPercentage = walkability_score
                 
                 # Save mask and prepare files for depth service
                 mask_path = "mask.png"
                 cv2.imwrite(mask_path, unified_mask * 255)  # Ensure mask values are 0-255
+                
+                depth_results = None
+                distance_meters = None
+                topmost_pixel = None
+                focal_length_px = None
                 
                 try:
                     with open(image_path, "rb") as image_file, open(mask_path, "rb") as mask_file:
@@ -279,45 +281,89 @@ class FootPath(Resource):
                             "file": image_file,
                             "mask": mask_file
                         }
-                        response = requests.post(os.getenv("DEPTH_LIT_URL"), files=files)
+                        response = requests.post(os.getenv("DEPTH_LIT_URL"), files=files, timeout=30)
+                        
+                        print(f"Depth service response status: {response.status_code}")
+                        print(f"Depth service response headers: {response.headers}")
+                        print(f"Depth service raw response: {response.text[:500]}")
+                        
                         if response.status_code == 200:
-                            depth_results = response.json()
+                            try:
+                                depth_results = response.json()
+                                print(f"Depth results parsed successfully: {depth_results}")
+                            except json.JSONDecodeError as je:
+                                print(f"Failed to parse depth service JSON: {je}")
+                                print(f"Raw response content: {response.text}")
+                                depth_results = None
                         else:
-                            print(response.json())
-                            return jsonify({'Error': 'Depth estimation service error'})
+                            print(f"Depth service error: {response.status_code} - {response.text}")
+                            depth_results = None
+                            
+                except requests.exceptions.RequestException as re:
+                    print(f"Request to depth service failed: {re}")
+                    depth_results = None
+                except Exception as de:
+                    print(f"Unexpected error with depth service: {de}")
+                    depth_results = None
                 finally:
                     # Clean up mask file
                     if os.path.exists(mask_path):
                         os.remove(mask_path)
-                distance_meters = depth_results.get('distance_meters')
-                topmost_pixel = depth_results.get('topmost_pixel')
-                focal_length_px = depth_results.get('focal_length_px')
-                print(f"Depth results: {depth_results}")    
+                
+                # Process depth results if available
+                if depth_results:
+                    distance_meters = depth_results.get('distance_meters')
+                    topmost_pixel = depth_results.get('topmost_pixel')
+                    focal_length_px = depth_results.get('focal_length_px')
+                
                 if distance_meters is not None and topmost_pixel is not None:
-                        length = distance_meters
-                        end = distance(meters=length).destination(point=Point(start_latitude, start_longitude), bearing=bearing)
-                        print(f"End coordinate: {end.latitude}, {end.longitude}")
-                        print(f"Farthest footpath pixel: {topmost_pixel}")
-                        print(f"Estimated distance: {distance_meters} meters")
-                        
-                        response_data = {
-                            'Percentage': footpathPercentage,
-                            'end_coordinates': {
-                                'latitude': end.latitude,
-                                'longitude': end.longitude
-                            },
-                            'distance_meters': distance_meters,
-                            'topmost_pixel': [int(topmost_pixel[0]), int(topmost_pixel[1])],
-                            'focal_length_px': float(focal_length_px) if focal_length_px is not None else None}
+                    length = distance_meters
+                    end = distance(meters=length).destination(point=Point(start_latitude, start_longitude), bearing=bearing)
+                    print(f"End coordinate: {end.latitude}, {end.longitude}")
+                    print(f"Farthest footpath pixel: {topmost_pixel}")
+                    print(f"Estimated distance: {distance_meters} meters")
+                    
+                    response_data = {
+                        'Percentage': footpathPercentage,
+                        'end_coordinates': {
+                            'latitude': end.latitude,
+                            'longitude': end.longitude
+                        },
+                        'distance_meters': distance_meters,
+                        'topmost_pixel': [int(topmost_pixel[0]), int(topmost_pixel[1])],
+                        'focal_length_px': float(focal_length_px) if focal_length_px is not None else None
+                    }
+                    end_lat, end_lng = end.latitude, end.longitude
                 else:
-                        response_data = {
-                            'Percentage': footpathPercentage,
-                            'Error': 'Could not calculate distance from depth'
-                        }
+                    # Use default distance if depth estimation fails
+                    default_distance = 10.0  # 10 meters default
+                    end = distance(meters=default_distance).destination(point=Point(start_latitude, start_longitude), bearing=bearing)
+                    print(f"Using default distance: {default_distance} meters")
+                    print(f"End coordinate: {end.latitude}, {end.longitude}")
+                    
+                    response_data = {
+                        'Percentage': footpathPercentage,
+                        'end_coordinates': {
+                            'latitude': end.latitude,
+                            'longitude': end.longitude
+                        },
+                        'distance_meters': default_distance,
+                        'Error': 'Could not calculate distance from depth, using default'
+                    }
+                    end_lat, end_lng = end.latitude, end.longitude
             else:
                 footpathPercentage = 0
+                # Use default coordinates if no footpath detected
+                default_distance = 5.0
+                end = distance(meters=default_distance).destination(point=Point(start_latitude, start_longitude), bearing=bearing)
+                end_lat, end_lng = end.latitude, end.longitude
+                
                 response_data = {
                     'Percentage': footpathPercentage,
+                    'end_coordinates': {
+                        'latitude': end_lat,
+                        'longitude': end_lng
+                    },
                     'Error': 'No footpath detected'
                 }
             
@@ -341,8 +387,8 @@ class FootPath(Resource):
                     'latitude': start_latitude,
                     'longitude': start_longitude,
                     'score': footpathPercentage,
-                    'latitude_end': end.latitude,
-                    'longitude_end': end.longitude,
+                    'latitude_end': end_lat,
+                    'longitude_end': end_lng,
                     'user_rating': user_rating,
                     'image_link': image_url,
                 }).execute()
@@ -368,11 +414,7 @@ class FootPath(Resource):
                             os.remove(image_path)
                     except PermissionError:
                         print(f"Could not remove {image_path} - file in use")
-                    try:
-                        if os.path.exists("mask.png"):
-                            os.remove("mask.png")
-                    except PermissionError:
-                        print(f"Could not remove mask.png - file in use")
+                        
             except Exception as e:
                 print(f"Error with Supabase operations: {str(e)}")
                 try:
@@ -382,9 +424,18 @@ class FootPath(Resource):
                     print(f"Could not remove {image_path} - file in use")
                 return jsonify({'Error': f'Database error: {str(e)}'})
 
-            # Don't clean up here - let background task handle it
+            # Return the response
             return jsonify(response_data)
 
+        except json.JSONDecodeError as je:
+            print(f"JSON Decode Error in FootPath: {je}")
+            try:
+                if 'image_path' in locals() and os.path.exists(image_path):
+                    os.remove(image_path)
+            except:
+                pass
+            return jsonify({'Error': f'JSON parsing error: {str(je)}'})
+            
         except Exception as e:
             print(f"Error processing request: {str(e)}")
             # Clean up image file on general error
@@ -394,51 +445,6 @@ class FootPath(Resource):
             except PermissionError:
                 print(f"Could not remove {image_path} - file in use")
             return jsonify({'Error': str(e)})
-    
-    def trigger_auth_tagging_async(self, image_path, start_latitude, start_longitude, fid):
-        """Trigger auth tagging via async HTTP request (worker-friendly)"""
-        try:
-            def make_request():
-                try:
-                    with open(image_path, 'rb') as img_file:
-                        files = {'image': img_file}
-                        data = {
-                            'startLatitude': start_latitude,
-                            'startLongitude': start_longitude,
-                            'fid': fid
-                        }
-                        
-                        # Make request to auth-tagging endpoint
-                        # Update URL for your deployment
-                        response = requests.post(
-                            'http://localhost:5000/auth-tagging',
-                            files=files, 
-                            data=data,
-                            timeout=60
-                        )
-                        
-                        if response.status_code == 200:
-                            print(f"Auth tagging completed for FID {fid}")
-                        else:
-                            print(f"Auth tagging failed for FID {fid}: {response.status_code}")
-                            
-                except Exception as e:
-                    print(f"Error in async auth tagging for FID {fid}: {e}")
-                finally:
-                    # Always clean up image file after processing
-                    if os.path.exists(image_path):
-                        os.remove(image_path)
-                        print(f"Cleaned up image file: {image_path}")
-            
-            # Use daemon thread for background processing
-            thread = threading.Thread(target=make_request, daemon=True)
-            thread.start()
-            
-        except Exception as e:
-            print(f"Failed to trigger async auth tagging: {e}")
-            # Clean up immediately if thread creation fails
-            if os.path.exists(image_path):
-                os.remove(image_path)
 
 def clean_and_parse_json(response_text):
     """Clean and parse JSON response from the API"""
