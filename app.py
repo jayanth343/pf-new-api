@@ -281,7 +281,7 @@ class FootPath(Resource):
                             "file": image_file,
                             "mask": mask_file
                         }
-                        response = requests.post(os.getenv("DEPTH_LIT_URL"), files=files, timeout=30)
+                        response = requests.post(os.getenv("DEPTH_LIT_URL"), files=files,headers={'Authorization': 'Bearer 35be253d-6005-4bd5-80c8-0e5b4487af28'},timeout=30)
                         
                         print(f"Depth service response status: {response.status_code}")
                         print(f"Depth service response headers: {response.headers}")
