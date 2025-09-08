@@ -276,39 +276,64 @@ class FootPath(Resource):
                 focal_length_px = None
                 
                 try:
-                    with open(image_path, "rb") as image_file, open(mask_path, "rb") as mask_file:
-                        files = {
-                            "file": image_file,
-                            "mask": mask_file
-                        }
-                        response = requests.post(os.getenv("DEPTH_LIT_URL"), files=files,headers={'Authorization': 'Bearer 35be253d-6005-4bd5-80c8-0e5b4487af28'},timeout=30)
-                        
-                        print(f"Depth service response status: {response.status_code}")
-                        print(f"Depth service response headers: {response.headers}")
-                        print(f"Depth service raw response: {response.text[:500]}")
-                        
-                        if response.status_code == 200:
-                            try:
-                                depth_results = response.json()
-                                print(f"Depth results parsed successfully: {depth_results}")
-                            except json.JSONDecodeError as je:
-                                print(f"Failed to parse depth service JSON: {je}")
-                                print(f"Raw response content: {response.text}")
-                                depth_results = None
-                        else:
-                            print(f"Depth service error: {response.status_code} - {response.text}")
-                            depth_results = None
-                            
-                except requests.exceptions.RequestException as re:
-                    print(f"Request to depth service failed: {re}")
-                    depth_results = None
-                except Exception as de:
-                    print(f"Unexpected error with depth service: {de}")
-                    depth_results = None
-                finally:
-                    # Clean up mask file
-                    if os.path.exists(mask_path):
-                        os.remove(mask_path)
+    with open(image_path, "rb") as image_file, open(mask_path, "rb") as mask_file:
+        files = {
+            "file": image_file,
+            "mask": mask_file
+        }
+        response = requests.post(
+            os.getenv("DEPTH_LIT_URL"), 
+            files=files,
+            headers={'Authorization': 'Bearer 35be253d-6005-4bd5-80c8-0e5b4487af28'},
+            timeout=30
+        )
+        
+        print(f"Depth service response status: {response.status_code}")
+        print(f"Depth service response headers: {response.headers}")
+        print(f"Raw response text: {response.text}")
+        
+        if response.status_code == 200:
+            try:
+                depth_results = response.json()
+                print(f"Parsed depth results: {depth_results}")
+                
+                # Check if the expected fields exist
+                distance_meters = depth_results.get('distance_meters')
+                topmost_pixel = depth_results.get('topmost_pixel')
+                focal_length_px = depth_results.get('focal_length_px')
+                
+                print(f"distance_meters: {distance_meters}")
+                print(f"topmost_pixel: {topmost_pixel}")
+                print(f"focal_length_px: {focal_length_px}")
+                
+                # Check for None values specifically
+                if distance_meters is None:
+                    print("WARNING: distance_meters is None")
+                if topmost_pixel is None:
+                    print("WARNING: topmost_pixel is None")
+                    
+            except json.JSONDecodeError as e:
+                print(f"Failed to parse depth service JSON: {e}")
+                print(f"Raw response content: {response.text}")
+                depth_results = None
+        else:
+            print(f"Depth service error: {response.status_code}")
+            print(f"Error response: {response.text}")
+            depth_results = None
+            
+        except requests.exceptions.Timeout:
+            print("Depth service request timed out")
+            depth_results = None
+        except requests.exceptions.RequestException as e:
+            print(f"Request to depth service failed: {e}")
+            depth_results = None
+        except Exception as e:
+            print(f"Unexpected error with depth service: {e}")
+            depth_results = None
+        finally:
+            # Clean up mask file
+            if os.path.exists(mask_path):
+                os.remove(mask_path)
                 
                 # Process depth results if available
                 print(depth_results)
@@ -316,6 +341,8 @@ class FootPath(Resource):
                     distance_meters = depth_results.get('distance_meters')
                     topmost_pixel = depth_results.get('topmost_pixel')
                     focal_length_px = depth_results.get('focal_length_px')
+                    print(f"Checking depth data - distance_meters: {distance_meters}, topmost_pixel: {topmost_pixel}")
+
                 
                 if distance_meters is not None and topmost_pixel is not None:
                     length = distance_meters
