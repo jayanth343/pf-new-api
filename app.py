@@ -320,10 +320,10 @@ class FootPath(Resource):
                         print(f"Depth service error: {response.status_code}")
                         print(f"Error response: {response.text}")
                         depth_results = None
-                except Exception as e:
+            except Exception as e:
                     print(f"Unexpected error with depth service: {e}")
                     depth_results = None
-                finally:
+            finally:
                     # Clean up mask file
                     if os.path.exists(mask_path):
                         os.remove(mask_path)
