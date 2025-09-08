@@ -9,9 +9,7 @@ from dotenv import load_dotenv
 from geopy.distance import distance
 from geopy import Point
 from geopy.geocoders import Nominatim
-import os
 from supabase import create_client, Client
-import depth_pro as depth_pro
 from datetime import datetime
 from skimage.measure import label, regionprops
 from google import genai
