@@ -311,6 +311,7 @@ class FootPath(Resource):
                         os.remove(mask_path)
                 
                 # Process depth results if available
+                print(depth_results)
                 if depth_results:
                     distance_meters = depth_results.get('distance_meters')
                     topmost_pixel = depth_results.get('topmost_pixel')
@@ -336,21 +337,7 @@ class FootPath(Resource):
                     end_lat, end_lng = end.latitude, end.longitude
                 else:
                     # Use default distance if depth estimation fails
-                    default_distance = 10.0  # 10 meters default
-                    end = distance(meters=default_distance).destination(point=Point(start_latitude, start_longitude), bearing=bearing)
-                    print(f"Using default distance: {default_distance} meters")
-                    print(f"End coordinate: {end.latitude}, {end.longitude}")
-                    
-                    response_data = {
-                        'Percentage': footpathPercentage,
-                        'end_coordinates': {
-                            'latitude': end.latitude,
-                            'longitude': end.longitude
-                        },
-                        'distance_meters': default_distance,
-                        'Error': 'Could not calculate distance from depth, using default'
-                    }
-                    end_lat, end_lng = end.latitude, end.longitude
+                     return jsonify({'Error': 'Could not caclulate depth'})
             else:
                 footpathPercentage = 0
                 # Use default coordinates if no footpath detected
