@@ -191,8 +191,8 @@ def compute_walkability(pred_mask, image_path=None, detections=None):
     os = 1 - (np.log(1 + num_regions) / np.log(1 + K))
 
     # Weighted combination (adjust weights as needed)
-    alpha, beta, gamma = 0.85, 0.10, 0.05
-    walkability_score = alpha * wap + beta * cs + gamma * os
+    alpha, beta = 0.90, 0.10
+    walkability_score = alpha * wap + beta * cs 
     print(f"Walkability Score: wAP: {wap:.2f} cs: {cs:.2f} os: {os:.2f} = final: {walkability_score:.2f}")
     return round(walkability_score, 2)
 
@@ -380,17 +380,25 @@ class FootPath(Resource):
                 # Get the public URL properly
                 image_url = supabase.storage.from_("footpath-images").get_public_url(file_name)
                 print(f"Image uploaded successfully. URL: {image_url}")
-
+                fid = request.form.get('fid')
                 # Insert into table
-                table_response = supabase.table("location-footpath").insert({
-                    'latitude': start_latitude,
-                    'longitude': start_longitude,
-                    'score': footpathPercentage,
-                    'latitude_end': end_lat,
-                    'longitude_end': end_lng,
-                    'user_rating': user_rating,
-                    'image_link': image_url,
-                }).execute()
+                if fid != None or fid != '' or fid != 0:
+                    table_response = supabase.table("location-footpath").update({
+                        'score': footpathPercentage,
+                        'user_rating': user_rating,
+                        'image_link': image_url,
+                    }).eq('fid', int(fid)).execute()
+                else:
+                # Insert into table
+                    table_response = supabase.table("location-footpath").insert({
+                        'latitude': start_latitude,
+                        'longitude': start_longitude,
+                        'score': footpathPercentage,
+                        'latitude_end': end.latitude,
+                        'longitude_end': end.longitude,
+                        'user_rating': user_rating,
+                        'image_link': image_url,
+                    }).execute()
                 
                 print(f"Data inserted into Supabase: {table_response.data}")
                 if table_response.data and len(table_response.data) > 0:
