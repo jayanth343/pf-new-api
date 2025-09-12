@@ -380,7 +380,7 @@ class FootPath(Resource):
                 # Get the public URL properly
                 image_url = supabase.storage.from_("footpath-images").get_public_url(file_name)
                 print(f"Image uploaded successfully. URL: {image_url}")
-                fid = request.form.get('fid')
+                fid = request.form.get('fid',0)
                 # Insert into table
                 if fid != None or fid != '' or fid != 0:
                     table_response = supabase.table("location-footpath").update({
