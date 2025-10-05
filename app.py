@@ -381,8 +381,9 @@ class FootPath(Resource):
                 image_url = supabase.storage.from_("footpath-images").get_public_url(file_name)
                 print(f"Image uploaded successfully. URL: {image_url}")
                 fid = request.form.get('fid',0)
+                print(f"FID from request: {fid}")
                 # Insert into table
-                if fid != None or fid != '' or fid != 0:
+                if fid and str(fid).strip() not in ['', '0']:
                     table_response = supabase.table("location-footpath").update({
                         'score': footpathPercentage,
                         'user_rating': user_rating,
@@ -398,7 +399,7 @@ class FootPath(Resource):
                         'longitude_end': end.longitude,
                         'user_rating': user_rating,
                         'image_link': image_url,
-                    }).execute()
+                    }).select().execute()
                 
                 print(f"Data inserted into Supabase: {table_response.data}")
                 if table_response.data and len(table_response.data) > 0:
