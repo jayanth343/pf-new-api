@@ -399,7 +399,7 @@ class FootPath(Resource):
                         'longitude_end': end.longitude,
                         'user_rating': user_rating,
                         'image_link': image_url,
-                    }).select().execute()
+                    }).execute()
                 
                 print(f"Data inserted into Supabase: {table_response.data}")
                 if table_response.data and len(table_response.data) > 0:
